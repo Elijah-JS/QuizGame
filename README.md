@@ -1,8 +1,8 @@
-# 🎮 KINE 3050 Quiz Game
+# 🎮 KINE 3050 Quiz 2 Game Updated
 
-An interactive quiz game built with **React**, designed to help students review key Kinesiology 3050 concepts in a fun, game-like way.
+An interactive quiz game built with **React**, designed to help students review key Kinesiology 3050 Quiz 2 exam concepts in one night .
 
-[▶ **Play the Game Now**](https://elijah-js.github.io/QuizGame)
+[▶ **Play the Game Now**](https://elijah-js.github.io/QuizGame/)
 
 ---
 
@@ -17,7 +17,7 @@ It includes:
 
 ## 🚀 Live Demo
 Click below to launch directly from GitHub Pages:
-> **https://elijah-js.github.io/QuizGame**
+> **https://elijah-js.github.io/QuizGame/**
 
 ---
 
