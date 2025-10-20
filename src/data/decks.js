@@ -7,10 +7,7 @@ export const DECKS = [
   "Policy, Law & Rights",
   "Employment & Poverty",
   "Labeling & Language",
-  "Caregiver & Support Systems",
-  "Adaptive Sport & Programming",
+
   "Activism, Leadership & Case Studies",
   "Public Health & Disparities",
-  "Practical Strategies & Solutions",
-  "Discussion & Exam Concepts",
 ];
