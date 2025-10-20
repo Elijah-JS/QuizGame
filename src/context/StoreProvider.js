@@ -5,9 +5,9 @@ import { loadJSON, saveJSON } from "../utils/storage";
 import { nowMs } from "../utils/scheduler";
 
 /** LocalStorage key — bump when you change deck taxonomy or bank format */
-const LS_KEY = "kine3050_state_v4";
+const LS_KEY = "kine3050_state_v5";
 
-/** ✅ Canonical deck list (NEW taxonomy) */
+/** ✅ Canonical deck list (FINAL taxonomy) */
 const DECKS = [
   "All",
   "Ableism vs Disablism",
@@ -21,9 +21,9 @@ const DECKS = [
   "Public Health & Disparities",
 ];
 
-/** 🔁 Migrate *old deck names* → new taxonomy (broad/default mapping) */
+/** 🔁 Migrate *old deck names* → new taxonomy (no references to removed decks) */
 const DECK_MIGRATION_NAME = {
-  // Previous course schema → closest new bucket
+  // Old → New
   "Activism & History": "Activism, Leadership & Case Studies",
   "Laws & Principles": "Policy, Law & Rights",
   "IEP & LRE": "Policy, Law & Rights",
@@ -33,37 +33,46 @@ const DECK_MIGRATION_NAME = {
   "Conditions: Adults (21–50)": "Health & Physical Activity Benefits/Risks",
   "Conditions: 50+ & Aging": "Health & Physical Activity Benefits/Risks",
   "Benefits & Labeling": "Labeling & Language",
-
-  // Other variants we encountered
   "Activism & Cases": "Activism, Leadership & Case Studies",
+  "Program Controls": "Health & Physical Activity Benefits/Risks",
+
+  // Already-valid names kept as-is
   "Ableism vs Disablism": "Ableism vs Disablism",
   "Universal Design (UD)": "Universal Design (UD)",
   "Public Health & Disparities": "Public Health & Disparities",
-  "Program Controls": "Health & Physical Activity Benefits/Risks",
 };
 
 /** 🎯 Fine-grained migration using question ID prefixes (overrides name mapping) */
 function migrateDeckByIdPrefix(q) {
   const id = q.id || "";
+
+  // Core families
   if (id.startsWith("ah_")) return "Activism, Leadership & Case Studies";
   if (id.startsWith("lp_")) return "Policy, Law & Rights";
-  if (id.startsWith("il_")) return "Policy, Law & Rights"; // IEP/LRE
+  if (id.startsWith("il_")) return "Policy, Law & Rights"; // IEP/LRE content belongs under Policy
   if (id.startsWith("pc_")) return "Health & Physical Activity Benefits/Risks"; // program controls/contra
+  if (id.startsWith("rb_")) return "Health & Physical Activity Benefits/Risks"; // risks/benefits specific
   if (id.startsWith("c_early_")) return "Health & Physical Activity Benefits/Risks";
   if (id.startsWith("c_school_")) return "Health & Physical Activity Benefits/Risks";
   if (id.startsWith("c_adult_")) return "Health & Physical Activity Benefits/Risks";
   if (id.startsWith("c_aging_")) return "Health & Physical Activity Benefits/Risks";
+
+  // Benefits/Labeling splits
   if (id.startsWith("bl_benefits_")) return "Health & Physical Activity Benefits/Risks";
   if (id.startsWith("bl_label")) return "Labeling & Language";
+
+  // Concept blocks
   if (id.startsWith("ad_")) return "Ableism vs Disablism";
   if (id.startsWith("ud_")) return "Universal Design (UD)";
   if (id.startsWith("ph_")) return "Public Health & Disparities";
   if (id.startsWith("emp_")) return "Employment & Poverty";
-  if (id.startsWith("cg_")) return "Caregiver & Support Systems";
   if (id.startsWith("bs_")) return "Barriers to Inclusion";
-  if (id.startsWith("pp_")) return "Practical Strategies & Solutions";
-  if (id.startsWith("rb_")) return "Health & Physical Activity Benefits/Risks";
-  if (id.startsWith("gs_")) return "Discussion & Exam Concepts";
+
+  // Previously-removed families — map to closest valid deck
+  if (id.startsWith("cg_")) return "Health & Physical Activity Benefits/Risks"; // caregiver → participation/health
+  if (id.startsWith("pp_")) return "Barriers to Inclusion"; // practical strategies → barrier fixes/actions
+  if (id.startsWith("gs_")) return "Public Health & Disparities"; // general society/media → public framing
+
   return null; // no override → fall back to name mapping
 }
 
@@ -79,11 +88,10 @@ function mapBankToNewDecks(bank) {
   return bank.map((q) => {
     const byId = migrateDeckByIdPrefix(q);
     const migrated = byId || normalizeDeckName(q.deck);
-    if (!DECKS.includes(migrated)) {
-      // last-resort safety net
-      return { ...q, deck: "Key Terms & Big Ideas" };
-    }
-    return { ...q, deck: migrated };
+
+    // Final guardrail: if anything still slips through, send to a real deck
+    const finalDeck = DECKS.includes(migrated) ? migrated : "Barriers to Inclusion";
+    return { ...q, deck: finalDeck };
   });
 }
 
@@ -99,6 +107,7 @@ function freshProgress(MAPPED_BANK) {
 function reconcileProgress(savedProgress, MAPPED_BANK) {
   const base = freshProgress(MAPPED_BANK);
   if (!savedProgress || typeof savedProgress !== "object") return base;
+
   for (const q of MAPPED_BANK) {
     if (savedProgress[q.id]) {
       const p = savedProgress[q.id];
@@ -121,26 +130,26 @@ export function StoreProvider({ children }) {
 
   // Dev helper: warn once if anything still looks off
   useEffect(() => {
-    const badDecks = Array.from(new Set(BANK.map((q) => q.deck))).filter(
+    const nonCanon = Array.from(new Set(BANK.map((q) => q.deck))).filter(
       (d) => !DECKS.includes(d)
     );
-    if (badDecks.length) {
+    if (nonCanon.length) {
       // eslint-disable-next-line no-console
-      console.warn("[StoreProvider] Non-canonical decks after migration:", badDecks);
+      console.warn("[StoreProvider] Non-canonical decks after migration:", nonCanon);
     }
   }, [BANK]);
 
-  // 2) Load saved state (note: version bump → resets if prior key missing)
+  // 2) Load saved state (note: LS_KEY bump → resets old cached state)
   const saved = loadJSON(LS_KEY);
 
-  // Normalize selected deck & progress on load using the *mapped* BANK
+  // 3) Normalize selected deck & progress on load using the *mapped* BANK
   const [deck, setDeckState] = useState(normalizeDeckName(saved?.deck));
   const [settings, setSettings] = useState(
     saved?.settings || { quizLength: 10, cramLength: 15 }
   );
   const [progress, setProgress] = useState(reconcileProgress(saved?.progress, BANK));
 
-  // 3) Persist to LocalStorage whenever state changes
+  // 4) Persist to LocalStorage whenever state changes
   useEffect(() => {
     saveJSON(LS_KEY, { deck, settings, progress });
   }, [deck, settings, progress]);
