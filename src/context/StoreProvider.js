@@ -1,101 +1,59 @@
 // src/context/StoreProvider.jsx
-import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
+import React, {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import { BANK as RAW_BANK } from "../data/bank";
 import { loadJSON, saveJSON } from "../utils/storage";
 import { nowMs } from "../utils/scheduler";
 
-/** LocalStorage key — bump when you change deck taxonomy or bank format */
-const LS_KEY = "kine3050_state_v5";
+/** LocalStorage key — new namespace for Quiz 3 version */
+const LS_KEY = "kine3050_q3_state_v1";
 
-/** ✅ Canonical deck list (FINAL taxonomy) */
+/** ✅ Canonical deck list for QUIZ 3 (FINAL) */
 const DECKS = [
   "All",
-  "Ableism vs Disablism",
-  "Universal Design (UD)",
-  "Barriers to Inclusion",
-  "Health & Physical Activity Benefits/Risks",
-  "Policy, Law & Rights",
-  "Employment & Poverty",
-  "Labeling & Language",
-  "Activism, Leadership & Case Studies",
-  "Public Health & Disparities",
+
+  // Families & Caregivers
+  "Families & Caregivers",
+  "Caregiver Stress, Grief & Coping",
+  "Family Dynamics, Culture & Finances",
+
+  // Assessment & Planning
+  "Assessment vs Evaluation",
+  "Paradigm for Effectiveness",
+  "Assessment Tools & Issues",
+  "Program Planning Across the Lifespan",
+
+  // Health, Leisure, Promotion
+  "Health-Related Fitness & Public Health",
+  "Leisure & Recreation",
+  "Barriers to Participation",
+  "Promoting PA, Exercise, Recreation & Leisure",
+
+  // Adapted Sport
+  "Adapted Sport & Equal Opportunity",
+  "School Policy, ADA & 504",
 ];
 
-/** 🔁 Migrate *old deck names* → new taxonomy (no references to removed decks) */
-const DECK_MIGRATION_NAME = {
-  // Old → New
-  "Activism & History": "Activism, Leadership & Case Studies",
-  "Laws & Principles": "Policy, Law & Rights",
-  "IEP & LRE": "Policy, Law & Rights",
-  "Program Controls & Contraindications": "Health & Physical Activity Benefits/Risks",
-  "Conditions: Early (0–5)": "Health & Physical Activity Benefits/Risks",
-  "Conditions: School Age (6–21)": "Health & Physical Activity Benefits/Risks",
-  "Conditions: Adults (21–50)": "Health & Physical Activity Benefits/Risks",
-  "Conditions: 50+ & Aging": "Health & Physical Activity Benefits/Risks",
-  "Benefits & Labeling": "Labeling & Language",
-  "Activism & Cases": "Activism, Leadership & Case Studies",
-  "Program Controls": "Health & Physical Activity Benefits/Risks",
-
-  // Already-valid names kept as-is
-  "Ableism vs Disablism": "Ableism vs Disablism",
-  "Universal Design (UD)": "Universal Design (UD)",
-  "Public Health & Disparities": "Public Health & Disparities",
-};
-
-/** 🎯 Fine-grained migration using question ID prefixes (overrides name mapping) */
-function migrateDeckByIdPrefix(q) {
-  const id = q.id || "";
-
-  // Core families
-  if (id.startsWith("ah_")) return "Activism, Leadership & Case Studies";
-  if (id.startsWith("lp_")) return "Policy, Law & Rights";
-  if (id.startsWith("il_")) return "Policy, Law & Rights"; // IEP/LRE content belongs under Policy
-  if (id.startsWith("pc_")) return "Health & Physical Activity Benefits/Risks"; // program controls/contra
-  if (id.startsWith("rb_")) return "Health & Physical Activity Benefits/Risks"; // risks/benefits specific
-  if (id.startsWith("c_early_")) return "Health & Physical Activity Benefits/Risks";
-  if (id.startsWith("c_school_")) return "Health & Physical Activity Benefits/Risks";
-  if (id.startsWith("c_adult_")) return "Health & Physical Activity Benefits/Risks";
-  if (id.startsWith("c_aging_")) return "Health & Physical Activity Benefits/Risks";
-
-  // Benefits/Labeling splits
-  if (id.startsWith("bl_benefits_")) return "Health & Physical Activity Benefits/Risks";
-  if (id.startsWith("bl_label")) return "Labeling & Language";
-
-  // Concept blocks
-  if (id.startsWith("ad_")) return "Ableism vs Disablism";
-  if (id.startsWith("ud_")) return "Universal Design (UD)";
-  if (id.startsWith("ph_")) return "Public Health & Disparities";
-  if (id.startsWith("emp_")) return "Employment & Poverty";
-  if (id.startsWith("bs_")) return "Barriers to Inclusion";
-
-  // Previously-removed families — map to closest valid deck
-  if (id.startsWith("cg_")) return "Health & Physical Activity Benefits/Risks"; // caregiver → participation/health
-  if (id.startsWith("pp_")) return "Barriers to Inclusion"; // practical strategies → barrier fixes/actions
-  if (id.startsWith("gs_")) return "Public Health & Disparities"; // general society/media → public framing
-
-  return null; // no override → fall back to name mapping
-}
-
-/** Normalize any deck name into the new canonical set; default "All" */
+/** Normalize any requested deck name; default to "All" if invalid */
 function normalizeDeckName(name) {
   if (!name) return "All";
-  const migrated = DECK_MIGRATION_NAME[name] || name;
-  return DECKS.includes(migrated) ? migrated : "All";
+  return DECKS.includes(name) ? name : "All";
 }
 
-/** Produce a BANK that’s *canonically decked* for the new taxonomy */
-function mapBankToNewDecks(bank) {
+/** Optionally guard that all questions live in valid decks */
+function mapBankToCanonicalDecks(bank) {
   return bank.map((q) => {
-    const byId = migrateDeckByIdPrefix(q);
-    const migrated = byId || normalizeDeckName(q.deck);
-
-    // Final guardrail: if anything still slips through, send to a real deck
-    const finalDeck = DECKS.includes(migrated) ? migrated : "Barriers to Inclusion";
-    return { ...q, deck: finalDeck };
+    const deck = normalizeDeckName(q.deck);
+    return { ...q, deck };
   });
 }
 
-/** Build fresh progress for a given (mapped) BANK */
+/** Build fresh spaced-repetition progress for a given BANK */
 function freshProgress(MAPPED_BANK) {
   return MAPPED_BANK.reduce((acc, q) => {
     acc[q.id] = { box: 1, nextDue: nowMs(), seen: 0, correct: 0 };
@@ -103,7 +61,7 @@ function freshProgress(MAPPED_BANK) {
   }, {});
 }
 
-/** Merge saved progress with current (mapped) BANK (add new, drop removed) */
+/** Merge saved progress with current BANK (add new, drop removed) */
 function reconcileProgress(savedProgress, MAPPED_BANK) {
   const base = freshProgress(MAPPED_BANK);
   if (!savedProgress || typeof savedProgress !== "object") return base;
@@ -125,24 +83,27 @@ function reconcileProgress(savedProgress, MAPPED_BANK) {
 const StoreContext = createContext(null);
 
 export function StoreProvider({ children }) {
-  // 1) Map the raw bank to the NEW deck taxonomy (pure, stable)
-  const BANK = useMemo(() => mapBankToNewDecks(RAW_BANK), []);
+  // 1) Ensure the BANK only uses canonical decks
+  const BANK = useMemo(() => mapBankToCanonicalDecks(RAW_BANK), []);
 
-  // Dev helper: warn once if anything still looks off
+  // Dev helper: warn once if something still sneaks into a non-canonical deck
   useEffect(() => {
     const nonCanon = Array.from(new Set(BANK.map((q) => q.deck))).filter(
       (d) => !DECKS.includes(d)
     );
     if (nonCanon.length) {
       // eslint-disable-next-line no-console
-      console.warn("[StoreProvider] Non-canonical decks after migration:", nonCanon);
+      console.warn(
+        "[StoreProvider] Non-canonical decks detected in BANK:",
+        nonCanon
+      );
     }
   }, [BANK]);
 
-  // 2) Load saved state (note: LS_KEY bump → resets old cached state)
+  // 2) Load saved state under the new Quiz 3 LS key
   const saved = loadJSON(LS_KEY);
 
-  // 3) Normalize selected deck & progress on load using the *mapped* BANK
+  // 3) Normalize selected deck & progress on load
   const [deck, setDeckState] = useState(normalizeDeckName(saved?.deck));
   const [settings, setSettings] = useState(
     saved?.settings || { quizLength: 10, cramLength: 15 }
@@ -159,12 +120,13 @@ export function StoreProvider({ children }) {
 
   const value = useMemo(
     () => ({
-      BANK,         // ← already mapped to NEW taxonomy
-      DECKS,        // expose canonical decks to the UI
+      BANK,   // Quiz 3 questions, already using canonical decks
+      DECKS,  // canonical deck list for the UI
       deck,
       setDeck,
       settings,
-      updateSettings: (partial) => setSettings((s) => ({ ...s, ...partial })),
+      updateSettings: (partial) =>
+        setSettings((s) => ({ ...s, ...partial })),
       progress,
       setProgress,
       resetProgress: () => setProgress(freshProgress(BANK)),

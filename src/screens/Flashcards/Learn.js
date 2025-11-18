@@ -2,11 +2,39 @@ import React, { useMemo, useState, useEffect, useCallback } from "react";
 import { useStore } from "../../context/StoreProvider";
 import { selectByDeck } from "../../utils/scheduler";
 
+/* ------------------------------------------
+   Clean, correct answer formatter for Quiz 3
+---------------------------------------------*/
 function getAnswerText(card) {
   if (!card) return "";
-  if (card.type === "mc") return card.options?.[card.answerIndex] ?? "";
-  if (card.type === "tf") return card.answerBool ? "True" : "False";
-  return card.expected ?? "(Review the explanation)";
+
+  switch (card.type) {
+    case "mc":
+      return card.options?.[card.answerIndex] ?? "";
+
+    case "tf":
+      return card.answerBool ? "True" : "False";
+
+    case "ma":
+      // Show the correct options as a list
+      if (!Array.isArray(card.answerIndexes)) return "(See explanation)";
+      return card.answerIndexes
+        .map((i) => card.options?.[i])
+        .filter(Boolean)
+        .join(", ");
+
+    case "sa":
+      // Short-answer always uses card.answer for Quiz 3
+      return card.answer ?? "(Review explanation)";
+
+    case "match":
+      // Display pairs visually readable
+      if (!Array.isArray(card.pairs)) return "(See explanation)";
+      return card.pairs.map(([left, right]) => `${left} → ${right}`).join(" | ");
+
+    default:
+      return "(Review the explanation)";
+  }
 }
 
 export default function Learn() {
@@ -31,10 +59,11 @@ export default function Learn() {
     setIndex((i) => (i - 1 + pool.length) % pool.length);
   }, [pool.length]);
 
-  // Keyboard shortcuts: Space = flip, ArrowRight = next, ArrowLeft = back
+  // Keyboard shortcuts: Space = flip, Right = next, Left = back
   useEffect(() => {
     const onKey = (e) => {
       if (e.target.tagName === "TEXTAREA" || e.target.tagName === "INPUT") return;
+
       if (e.code === "Space") {
         e.preventDefault();
         setFlipped((f) => !f);
@@ -52,7 +81,9 @@ export default function Learn() {
     return (
       <div className="rounded-3xl border border-white/10 bg-white/[0.045] p-6 md:p-8 text-center">
         <div className="text-lg font-semibold mb-1">No cards available 🎉</div>
-        <div className="text-sm text-zinc-300/80">Add or switch decks to start learning.</div>
+        <div className="text-sm text-zinc-300/80">
+          Add or switch decks to start learning.
+        </div>
       </div>
     );
   }
@@ -92,7 +123,8 @@ export default function Learn() {
                 {card.prompt}
               </div>
               <div className="mt-3 text-[12px] text-zinc-400">
-                Click or press <span className="text-white/90 font-medium">Space</span> to reveal
+                Click or press <span className="text-white/90 font-medium">Space</span> to
+                reveal
               </div>
             </div>
           </div>
@@ -103,7 +135,9 @@ export default function Learn() {
               <div className="text-[11px] uppercase tracking-wider text-emerald-300 mb-2">
                 Answer
               </div>
-              <div className="text-lg md:text-xl font-semibold">{answerText}</div>
+              <div className="text-lg md:text-xl font-semibold whitespace-pre-wrap">
+                {answerText}
+              </div>
               {card.explain && (
                 <div className="mt-3 text-sm text-zinc-300/90">{card.explain}</div>
               )}
